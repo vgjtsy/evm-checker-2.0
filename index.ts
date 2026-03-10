@@ -73,7 +73,7 @@ try {
       ui.showError(`Конфигурация для сети ${network} не найдена`);
       process.exit(1);
     }
-    
+
     // Показываем информацию о проверке
     ui.showNetworkInfo(network, wallets.length, networkConfig.tokens);
 
@@ -93,24 +93,23 @@ try {
     const checker = new WalletChecker(checkerConfig);
     const results = await checker.check();
     const tokenHeaders = checker.getTokenHeaders();
-    
+
     await exporter.exportSingleNetwork(results, checkerConfig, tokenHeaders);
-    
-    const walletsWithBalance = results.filter(r => 
+
+    const walletsWithBalance = results.filter(r =>
       Array.from(r.balances.values()).some(b => parseFloat(b) > 0)
     ).length;
-    
+
     const stats = checker.getStats();
     ui.showStatistics({
       totalWallets: stats.totalWallets,
       totalTokens: stats.totalTokens,
       totalChecks: stats.successfulChecks + stats.failedChecks,
       walletsWithBalance,
-      totalBalance: 0, // Это поле не используется в текущей статистике
       duration: stats.duration / 1000,
       errors: stats.failedChecks
     }, network);
-    
+
     ui.showSuccess(`Результаты для сети ${CONFIG[network].NAME || network} сохранены в ${appConfig.resultsDir}/${network}.csv`);
 
   } else if (mode === 'all') {

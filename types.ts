@@ -10,7 +10,6 @@ export enum Network {
   ARBITRUM_NOVA = "arbitrum-nova",
   AVALANCHE = "avalanche",
   BASE = "base",
-  BASE_GOERLI = "base-goerli",
   BASE_SEPOLIA = "base-sepolia",
   BERACHAIN = "berachain",
   BLAST = "blast",
@@ -22,17 +21,13 @@ export enum Network {
   GNOSIS = "gnosis",
   HARMONY = "harmony",
   LINEA = "linea",
-  MEGAETH = "megaeth",
-  MONAD_TESTNET = "monad-testnet",
   OPTIMISM = "optimism",
   POLYGON = "polygon",
-  POLYGON_ZKEVM = "polygon_zkevm",
   RONIN = "ronin",
   SCROLL = "scroll",
   SHAPE = "shape",
   SONEIUM = "soneium",
   UNICHAIN = "unichain",
-  XTERIO = "xterio",
   ZERO = "zero",
   ZKSYNC = "zksync",
   ZORA = "zora",
@@ -169,12 +164,12 @@ export const MULTICALL3_ABI = [
 
 export async function getAddressFromWallet(input: string): Promise<string> {
   const cleanInput = input.trim();
-  
+
   // Проверяем, является ли это адресом (начинается с 0x и имеет 42 символа)
   if (cleanInput.startsWith("0x") && cleanInput.length === 42) {
     return cleanInput;
   }
-  
+
   // Если это приватный ключ, конвертируем в адрес
   try {
     const ethers = await import("ethers");
@@ -194,12 +189,12 @@ export async function loadWalletsFromFile(filename: string): Promise<WalletData[
       .split("\n")
       .map((line: string) => line.trim())
       .filter((line: string) => line.length > 0);
-    
+
     const wallets: WalletData[] = [];
-    
+
     for (const line of lines) {
       const address = await getAddressFromWallet(line);
-      
+
       // Если строка длиннее 42 символов, это вероятно приватный ключ
       if (line.length > 42 && line !== address) {
         wallets.push({ address, privateKey: line });
@@ -207,7 +202,7 @@ export async function loadWalletsFromFile(filename: string): Promise<WalletData[
         wallets.push({ address });
       }
     }
-    
+
     return wallets;
   } catch (error) {
     console.error(`Error loading wallets from ${filename}:`, error);

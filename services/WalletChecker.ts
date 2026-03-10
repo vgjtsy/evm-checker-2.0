@@ -1,12 +1,14 @@
 import { NativeBalanceProvider, ERC20BalanceProvider } from "./BalanceService";
-import { 
-  CheckerConfig, 
+import {
+  CheckerConfig,
   WalletBalance,
   CheckerStats,
   Network
 } from "../types";
 import { UIService } from "./UIService";
 import { CONFIG } from "../config";
+import fs from "fs";
+import path from "path";
 
 export class WalletChecker {
   private config: CheckerConfig;
@@ -15,11 +17,24 @@ export class WalletChecker {
   private tokenHeaders: string[] = [];
   private ui: UIService;
 
+  private logError(message: string): void {
+    try {
+      if (!fs.existsSync("results")) {
+        fs.mkdirSync("results", { recursive: true });
+      }
+      const logPath = path.join("results", "error_log.txt");
+      const timestamp = new Date().toISOString();
+      fs.appendFileSync(logPath, `[${timestamp}] ${message}\n`);
+    } catch (e) {
+      // игнорируем ошибки логирования
+    }
+  }
+
   // Получить название токена по адресу из конфигурации сети
   private getTokenNameByAddress(address: string): string | null {
     const networkConfig = CONFIG[this.config.network];
     if (!networkConfig || !networkConfig.TOKENS) return null;
-    
+
     // Ищем токен по адресу (case-insensitive)
     for (const [name, tokenAddress] of Object.entries(networkConfig.TOKENS)) {
       if (tokenAddress.toLowerCase() === address.toLowerCase()) {
@@ -41,7 +56,7 @@ export class WalletChecker {
       },
       ...config
     };
-    
+
     this.stats = {
       totalWallets: config.wallets.length,
       totalTokens: config.tokens.length,
@@ -49,7 +64,7 @@ export class WalletChecker {
       failedChecks: 0,
       duration: 0
     };
-    
+
     this.startTime = Date.now();
     this.ui = new UIService();
   }
@@ -65,43 +80,28 @@ export class WalletChecker {
     const addresses = this.config.wallets.map(w => w.address);
 
     // Инициализируем провайдеры токенов и получаем заголовки
-    const tokenProviders: Array<{
-      token: string;
-      provider: NativeBalanceProvider | ERC20BalanceProvider;
-      header: string;
-    }> = [];
-
     let initCount = 0;
-    for (const token of this.config.tokens) {
+    const tokenInitPromises = this.config.tokens.map(async (token) => {
+      let provider: NativeBalanceProvider | ERC20BalanceProvider;
+      let header: string;
+
       if (token === "native") {
-        const provider = new NativeBalanceProvider(this.config.network);
-        const nativeName = CONFIG[this.config.network].NATIVE_CURRENCY || "Native";
-        tokenProviders.push({ token, provider, header: nativeName });
-        this.tokenHeaders.push(nativeName);
+        provider = new NativeBalanceProvider(this.config.network);
+        header = CONFIG[this.config.network].NATIVE_CURRENCY || "Native";
       } else {
-        const provider = new ERC20BalanceProvider(this.config.network, token);
-        
-        // Сначала пытаемся получить название из конфигурации сети
-        let header = this.getTokenNameByAddress(token);
-        
-        if (!header) {
-          // Если в конфигурации нет, пытаемся получить из контракта
-          try {
-            await provider.initialize();
-            const tokenInfo = provider.getTokenInfo();
-            header = tokenInfo.symbol || `Token_${token.slice(0, 6)}`;
-          } catch (error) {
-            if (this.config.options?.logErrors) {
-              console.error(`❌ Error initializing token ${token}:`, error);
-            }
-            header = `Token_${token.slice(0, 6)}`;
+        provider = new ERC20BalanceProvider(this.config.network, token);
+        try {
+          await provider.initialize();
+          const tokenInfo = (provider as ERC20BalanceProvider).getTokenInfo();
+          header = tokenInfo.symbol || `Token_${token.slice(0, 6)}`;
+        } catch (error) {
+          if (this.config.options?.logErrors) {
+            this.logError(`Error initializing token ${token}: ${error}`);
           }
+          header = this.getTokenNameByAddress(token) || `Token_${token.slice(0, 6)}`;
         }
-        
-        tokenProviders.push({ token, provider, header });
-        this.tokenHeaders.push(header);
       }
-      
+
       initCount++;
       if (this.config.options?.showProgress) {
         this.ui.updateProgress({
@@ -110,7 +110,12 @@ export class WalletChecker {
           currentItem: "Инициализация токенов"
         });
       }
-    }
+
+      return { token, provider, header };
+    });
+
+    const tokenProviders = await Promise.all(tokenInitPromises);
+    this.tokenHeaders = tokenProviders.map(p => p.header);
 
     if (this.config.options?.showProgress) {
       this.ui.updateProgress({
@@ -123,13 +128,13 @@ export class WalletChecker {
     // ПАРАЛЛЕЛЬНО проверяем все токены одновременно
     let completedChecks = 0;
     const totalChecks = tokenProviders.length * addresses.length;
-    
+
     const tokenBalancePromises = tokenProviders.map(async ({ token, provider, header }) => {
       try {
         const balances = await this.getBatchedBalances(provider, addresses);
         this.stats.successfulChecks += addresses.length;
         completedChecks += addresses.length;
-        
+
         if (this.config.options?.showProgress) {
           this.ui.updateProgress({
             current: completedChecks,
@@ -137,12 +142,12 @@ export class WalletChecker {
             currentItem: header
           });
         }
-        
+
         return { token, balances, error: null };
       } catch (error) {
         this.stats.failedChecks += addresses.length;
         completedChecks += addresses.length;
-        
+
         if (this.config.options?.showProgress) {
           this.ui.updateProgress({
             current: completedChecks,
@@ -150,9 +155,9 @@ export class WalletChecker {
             currentItem: header
           });
         }
-        
+
         if (this.config.options?.logErrors) {
-          console.error(`Error checking token ${token}:`, error);
+          this.logError(`Error checking token ${token}: ${error}`);
         }
         // Возвращаем нулевые балансы при ошибке
         const emptyBalances = new Map<string, string>();
@@ -176,7 +181,7 @@ export class WalletChecker {
       addresses.forEach((address, index) => {
         const balance = balances.get(address) || "0";
         results[index].balances.set(token, balance);
-        
+
         if (error) {
           if (!results[index].errors) {
             results[index].errors = new Map();
@@ -200,7 +205,7 @@ export class WalletChecker {
     addresses: string[]
   ): Promise<Map<string, string>> {
     const batchSize = this.config.options?.batchSize || 100;
-    
+
     // Если адресов мало, обрабатываем все сразу
     if (addresses.length <= batchSize) {
       return await this.getBatchWithRetry(provider, addresses);
@@ -213,12 +218,12 @@ export class WalletChecker {
     }
 
     // Обрабатываем все батчи параллельно
-    const batchPromises = batches.map(batch => 
+    const batchPromises = batches.map(batch =>
       this.getBatchWithRetry(provider, batch)
     );
 
     const batchResults = await Promise.all(batchPromises);
-    
+
     // Объединяем результаты
     const allBalances = new Map<string, string>();
     batchResults.forEach(batchBalances => {
@@ -236,20 +241,25 @@ export class WalletChecker {
   ): Promise<Map<string, string>> {
     let attempts = 0;
     const maxAttempts = this.config.options?.retryAttempts || 3;
-    
+    let currentDelay = this.config.options?.retryDelay || 1000;
+
     while (attempts < maxAttempts) {
       try {
         return await provider.getBatchBalances(addresses);
       } catch (error) {
         attempts++;
         if (attempts < maxAttempts) {
-          await this.delay(this.config.options?.retryDelay || 1000);
+          if (this.config.options?.logErrors) {
+            this.logError(`RPC error for batch, retrying attempt ${attempts}/${maxAttempts}. Delay: ${currentDelay}ms. Error: ${error}`);
+          }
+          await this.delay(currentDelay);
+          currentDelay *= 2; // Экспоненциальная задержка
         } else {
           throw error;
         }
       }
     }
-    
+
     // Fallback - не должно сюда попасть
     const emptyBalances = new Map<string, string>();
     addresses.forEach(addr => emptyBalances.set(addr, "0"));

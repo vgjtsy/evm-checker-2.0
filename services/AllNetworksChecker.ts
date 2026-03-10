@@ -16,7 +16,7 @@ export class AllNetworksChecker {
   }
 
   async checkAllNetworks(): Promise<AllNetworksCheckResult[]> {
-    const networksToExclude = [Network.BASE_GOERLI, Network.XTERIO];
+    const networksToExclude: Network[] = [];
     const allNetworks = Object.values(Network)
       .filter(network => CONFIG[network] && !networksToExclude.includes(network))
       .sort((a, b) => {

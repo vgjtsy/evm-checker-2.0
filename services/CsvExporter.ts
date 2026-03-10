@@ -222,7 +222,8 @@ export class CsvExporter implements ResultExporter {
         return acc + value;
       }, 0);
       
-      totals.push(sum.toFixed(6).replace(/\.?0+$/, ''));
+      // Форматируем число с учетом DEFAULT_DECIMALS, убирая экспоненциальную запись и лишние нули
+      totals.push(sum.toFixed(18).replace(/(\.0*|(?<=(\.\d*?[1-9]))0+)$/, ''));
     }
 
     this.stream?.write("\n");

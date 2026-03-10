@@ -124,8 +124,8 @@ export class ERC20BalanceProvider implements BalanceProvider {
               try {
                 const hexValue = call.returnValues as unknown as string;
                 if (typeof hexValue === 'string' && hexValue.startsWith('0x')) {
-                  // Decimals возвращается как uint8, просто парсим hex
-                  const decimals = parseInt(hexValue, 16);
+                  // Decimals возвращается как uint8, парсим hex с помощью ethers.BigInt
+                  const decimals = Number(ethers.toBigInt(hexValue));
                   if (!isNaN(decimals) && decimals >= 0 && decimals <= 255) {
                     this.tokenInfo.decimals = decimals;
                   }

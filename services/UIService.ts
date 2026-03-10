@@ -16,7 +16,6 @@ export interface StatisticsInfo {
   totalTokens: number;
   totalChecks: number;
   walletsWithBalance: number;
-  totalBalance: number;
   duration: number;
   errors: number;
 }
@@ -66,7 +65,7 @@ export class UIService {
 
     const choices: prompts.Choice[] = availableNetworks.map(network => {
       const name = this.getNetworkName(network);
-      
+
       return {
         title: name,
         value: network,
@@ -77,11 +76,16 @@ export class UIService {
     choices.push({ title: chalk.red("Выход"), value: "exit" });
 
     const response = await prompts({
-      type: "select",
+      type: "autocomplete",
       name: "network",
-      message: "Сеть:",
+      message: "Сеть (начните вводить название):",
       choices,
-      initial: 0,
+      suggest: async (input: string, choices: prompts.Choice[]) => {
+        return choices.filter((choice: any) =>
+          choice.title.toLowerCase().includes(input.toLowerCase()) ||
+          (choice.value === "exit" && "выход".includes(input.toLowerCase()))
+        );
+      }
     });
 
     if (!response.network || response.network === "exit") {
@@ -141,7 +145,7 @@ export class UIService {
 
     const percentage = Math.round((info.current / info.total) * 100);
     const progressBar = this.createProgressBar(percentage);
-    
+
     let text = `${progressBar} ${percentage}% (${info.current}/${info.total})`;
     if (info.currentItem) text += ` - ${info.currentItem}`;
     if (info.details) text += ` ${chalk.gray(info.details)}`;
@@ -185,21 +189,21 @@ export class UIService {
     console.log();
     console.log(chalk.cyan.bold('📈 СТАТИСТИКА ПРОВЕРКИ'));
     console.log(chalk.cyan('═'.repeat(50)));
-    
+
     // Основные метрики
     console.log(chalk.blue('📊 Основные метрики:'));
     console.log(chalk.gray('  ├─ Проверено кошельков:'), chalk.yellow(stats.totalWallets.toLocaleString()));
     console.log(chalk.gray('  ├─ Проверено токенов:'), chalk.cyan(stats.totalTokens));
     console.log(chalk.gray('  ├─ Всего проверок:'), chalk.magenta(stats.totalChecks.toLocaleString()));
     console.log(chalk.gray('  └─ Время выполнения:'), chalk.white(`${stats.duration.toFixed(2)} сек`));
-    
+
     // Результаты
     console.log();
     console.log(chalk.green('💰 Результаты:'));
     console.log(chalk.gray('  ├─ Кошельков с балансом:'), chalk.green.bold(stats.walletsWithBalance.toLocaleString()));
     console.log(chalk.gray('  ├─ Процент активных:'), chalk.green(`${((stats.walletsWithBalance / stats.totalWallets) * 100).toFixed(1)}%`));
     console.log(chalk.gray('  └─ Ошибок:'), stats.errors > 0 ? chalk.red(stats.errors.toLocaleString()) : chalk.green('0'));
-    
+
     // Производительность
     console.log();
     console.log(chalk.magenta('⚡ Производительность:'));
