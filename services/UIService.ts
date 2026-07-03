@@ -24,41 +24,38 @@ export class UIService {
   private spinner: any | null = null;
 
   constructor() {
-    // Настройка prompts для лучшего UX
     prompts.override({
       onCancel: () => {
-        console.log(chalk.yellow('\n👋 Операция отменена пользователем'));
+        console.log(chalk.yellow('\n👋 Cancelled by user'));
         process.exit(0);
       }
     });
   }
 
-  // Красивый заголовок приложения
+  // Application header
   showHeader(): void {
     console.clear();
     console.log(chalk.cyan.bold('╔══════════════════════════════════════════════════════════════╗'));
-    console.log(chalk.cyan.bold('║                        EVM CHECKER                          ║'));
-    console.log(chalk.cyan.bold('║                  Проверка балансов кошельков                ║'));
+    console.log(chalk.cyan.bold('║                         EVM CHECKER                          ║'));
+    console.log(chalk.cyan.bold('║                  Multi-chain balance checker                 ║'));
     console.log(chalk.cyan.bold('╚══════════════════════════════════════════════════════════════╝'));
+    console.log(chalk.gray('              by ') + chalk.cyan('@polydao') + chalk.gray(' — https://x.com/polydao'));
     console.log();
   }
 
-  // Получить название сети
   private getNetworkName(network: Network): string {
     return CONFIG[network]?.NAME || network;
   }
 
-  // Получить название нативной валюты
   private getNativeCurrency(network: Network): string {
     return CONFIG[network]?.NATIVE_CURRENCY || 'ETH';
   }
 
-  // Простое меню выбора сети в алфавитном порядке
+  // Network selection menu (alphabetical, with autocomplete)
   async selectNetwork(): Promise<Network> {
-    console.log(chalk.cyan('🌐 Выберите сеть для проверки:'));
+    console.log(chalk.cyan('🌐 Select a network to check:'));
     console.log();
 
-    // Получаем все доступные сети и сортируем по алфавиту
     const availableNetworks = Object.values(Network)
       .filter(network => CONFIG[network])
       .sort((a, b) => this.getNetworkName(a).localeCompare(this.getNetworkName(b)));
@@ -72,74 +69,71 @@ export class UIService {
       };
     });
 
-    // Добавляем опцию выхода
-    choices.push({ title: chalk.red("Выход"), value: "exit" });
+    choices.push({ title: chalk.red("Exit"), value: "exit" });
 
     const response = await prompts({
       type: "autocomplete",
       name: "network",
-      message: "Сеть (начните вводить название):",
+      message: "Network (start typing to filter):",
       choices,
       suggest: async (input: string, choices: prompts.Choice[]) => {
         return choices.filter((choice: any) =>
           choice.title.toLowerCase().includes(input.toLowerCase()) ||
-          (choice.value === "exit" && "выход".includes(input.toLowerCase()))
+          (choice.value === "exit" && "exit".includes(input.toLowerCase()))
         );
       }
     });
 
     if (!response.network || response.network === "exit") {
-      console.log(chalk.yellow("\n👋 До свидания!"));
+      console.log(chalk.yellow("\n👋 Goodbye!"));
       process.exit(0);
     }
 
     return response.network as Network;
   }
 
-  // Выбор режима проверки: одна сеть или все
+  // Check mode selection: single network or all networks
   async selectCheckMode(): Promise<{ mode: 'single' | 'all' }> {
-    console.log(chalk.cyan('⚙️  Выберите режим проверки:'));
+    console.log(chalk.cyan('⚙️  Select check mode:'));
     console.log();
 
     const choices: prompts.Choice[] = [
-      { title: 'Проверить ОДНУ сеть', value: 'single', description: 'Проверка балансов в одной выбранной сети' },
-      { title: 'Проверить ВСЕ сети', value: 'all', description: 'Проверка балансов во всех доступных сетях' },
-      { title: chalk.red("Выход"), value: "exit" }
+      { title: 'Check ONE network', value: 'single', description: 'Check balances on a single selected network' },
+      { title: 'Check ALL networks', value: 'all', description: 'Check balances on all available networks' },
+      { title: chalk.red("Exit"), value: "exit" }
     ];
 
     const response = await prompts({
       type: "select",
       name: "mode",
-      message: "Режим:",
+      message: "Mode:",
       choices,
       initial: 0,
     });
 
     if (!response.mode || response.mode === "exit") {
-      console.log(chalk.yellow("\n👋 До свидания!"));
+      console.log(chalk.yellow("\n👋 Goodbye!"));
       process.exit(0);
     }
 
     return { mode: response.mode as 'single' | 'all' };
   }
 
-  // Показать информацию о выбранной сети
+  // Info about the upcoming check
   showNetworkInfo(network: Network, walletCount: number, tokenAddresses: string[]): void {
-    console.log(chalk.blue('📊 Информация о проверке:'));
-    console.log(chalk.gray('  ├─ Сеть:'), chalk.white.bold(this.getNetworkName(network)));
-    console.log(chalk.gray('  ├─ Нативная валюта:'), chalk.green(this.getNativeCurrency(network)));
-    console.log(chalk.gray('  ├─ Кошельков:'), chalk.yellow(walletCount.toLocaleString()));
-    console.log(chalk.gray('  ├─ Токенов:'), chalk.cyan(tokenAddresses.length + 1)); // +1 для нативного
-    console.log(chalk.gray('  └─ Всего проверок:'), chalk.magenta((walletCount * (tokenAddresses.length + 1)).toLocaleString()));
+    console.log(chalk.blue('📊 Check details:'));
+    console.log(chalk.gray('  ├─ Network:'), chalk.white.bold(this.getNetworkName(network)));
+    console.log(chalk.gray('  ├─ Native currency:'), chalk.green(this.getNativeCurrency(network)));
+    console.log(chalk.gray('  ├─ Wallets:'), chalk.yellow(walletCount.toLocaleString()));
+    console.log(chalk.gray('  ├─ Tokens:'), chalk.cyan(tokenAddresses.length + 1)); // +1 for native
+    console.log(chalk.gray('  └─ Total checks:'), chalk.magenta((walletCount * (tokenAddresses.length + 1)).toLocaleString()));
     console.log();
   }
 
-  // Запуск прогресс-бара
   startProgress(message: string): void {
     this.spinner = ora({ text: message, spinner: 'dots12', color: 'cyan' }).start();
   }
 
-  // Обновление прогресса
   updateProgress(info: ProgressInfo): void {
     if (!this.spinner) return;
 
@@ -153,14 +147,12 @@ export class UIService {
     this.spinner.text = text;
   }
 
-  // Создание прогресс-бара
   private createProgressBar(percentage: number, width: number = 20): string {
     const filled = Math.round((percentage / 100) * width);
     const empty = width - filled;
     return `[${chalk.green('█'.repeat(filled))}${chalk.gray('░'.repeat(empty))}]`;
   }
 
-  // Успешное завершение
   succeedProgress(message: string): void {
     if (this.spinner) {
       this.spinner.succeed(chalk.green(message));
@@ -168,7 +160,6 @@ export class UIService {
     }
   }
 
-  // Ошибка
   failProgress(message: string): void {
     if (this.spinner) {
       this.spinner.fail(chalk.red(message));
@@ -176,7 +167,6 @@ export class UIService {
     }
   }
 
-  // Остановка прогресса
   stopProgress(): void {
     if (this.spinner) {
       this.spinner.stop();
@@ -184,60 +174,99 @@ export class UIService {
     }
   }
 
-  // Показать детальную статистику
+  // Detailed statistics
   showStatistics(stats: StatisticsInfo, network: Network): void {
     console.log();
-    console.log(chalk.cyan.bold('📈 СТАТИСТИКА ПРОВЕРКИ'));
+    console.log(chalk.cyan.bold('📈 CHECK STATISTICS'));
     console.log(chalk.cyan('═'.repeat(50)));
 
-    // Основные метрики
-    console.log(chalk.blue('📊 Основные метрики:'));
-    console.log(chalk.gray('  ├─ Проверено кошельков:'), chalk.yellow(stats.totalWallets.toLocaleString()));
-    console.log(chalk.gray('  ├─ Проверено токенов:'), chalk.cyan(stats.totalTokens));
-    console.log(chalk.gray('  ├─ Всего проверок:'), chalk.magenta(stats.totalChecks.toLocaleString()));
-    console.log(chalk.gray('  └─ Время выполнения:'), chalk.white(`${stats.duration.toFixed(2)} сек`));
+    console.log(chalk.blue('📊 Metrics:'));
+    console.log(chalk.gray('  ├─ Wallets checked:'), chalk.yellow(stats.totalWallets.toLocaleString()));
+    console.log(chalk.gray('  ├─ Tokens checked:'), chalk.cyan(stats.totalTokens));
+    console.log(chalk.gray('  ├─ Total checks:'), chalk.magenta(stats.totalChecks.toLocaleString()));
+    console.log(chalk.gray('  └─ Duration:'), chalk.white(`${stats.duration.toFixed(2)}s`));
 
-    // Результаты
     console.log();
-    console.log(chalk.green('💰 Результаты:'));
-    console.log(chalk.gray('  ├─ Кошельков с балансом:'), chalk.green.bold(stats.walletsWithBalance.toLocaleString()));
-    console.log(chalk.gray('  ├─ Процент активных:'), chalk.green(`${((stats.walletsWithBalance / stats.totalWallets) * 100).toFixed(1)}%`));
-    console.log(chalk.gray('  └─ Ошибок:'), stats.errors > 0 ? chalk.red(stats.errors.toLocaleString()) : chalk.green('0'));
+    console.log(chalk.green('💰 Results:'));
+    console.log(chalk.gray('  ├─ Wallets with balance:'), chalk.green.bold(stats.walletsWithBalance.toLocaleString()));
+    console.log(chalk.gray('  ├─ Active wallets:'), chalk.green(`${((stats.walletsWithBalance / stats.totalWallets) * 100).toFixed(1)}%`));
+    console.log(chalk.gray('  └─ Errors:'), stats.errors > 0 ? chalk.red(stats.errors.toLocaleString()) : chalk.green('0'));
 
-    // Производительность
     console.log();
-    console.log(chalk.magenta('⚡ Производительность:'));
+    console.log(chalk.magenta('⚡ Performance:'));
     const checksPerSecond = stats.totalChecks / stats.duration;
-    console.log(chalk.gray('  ├─ Проверок в секунду:'), chalk.magenta.bold(checksPerSecond.toFixed(0)));
-    console.log(chalk.gray('  └─ Сеть:'), chalk.white(this.getNetworkName(network)));
+    console.log(chalk.gray('  ├─ Checks per second:'), chalk.magenta.bold(checksPerSecond.toFixed(0)));
+    console.log(chalk.gray('  └─ Network:'), chalk.white(this.getNetworkName(network)));
     console.log();
   }
 
-  // Показать ошибку
+  // Terminal summary table (top wallets, totals)
+  showSummaryTable(options: {
+    title: string;
+    headers: string[];
+    rows: string[][];
+    footer?: string[];
+  }): void {
+    const { title, headers, rows, footer } = options;
+
+    const allRows = [headers, ...rows, ...(footer ? [footer] : [])];
+    const widths = headers.map((_, col) =>
+      Math.max(...allRows.map(row => (row[col] ?? '').length))
+    );
+
+    // First column left-aligned, numeric columns right-aligned
+    const pad = (cell: string, col: number) =>
+      col === 0 ? cell.padEnd(widths[col]) : cell.padStart(widths[col]);
+
+    const renderRow = (cells: string[], colorize: (cell: string, col: number) => string) =>
+      '  ' + cells.map((cell, col) => colorize(pad(cell ?? '', col), col)).join('  ');
+
+    const totalWidth = widths.reduce((a, b) => a + b, 0) + widths.length * 2;
+
+    console.log();
+    console.log(chalk.cyan.bold(title));
+    console.log(chalk.cyan('─'.repeat(Math.min(totalWidth, 120))));
+    console.log(renderRow(headers, cell => chalk.white.bold(cell)));
+    console.log(chalk.gray('─'.repeat(Math.min(totalWidth, 120))));
+
+    rows.forEach(row => {
+      console.log(renderRow(row, (cell, col) => {
+        if (col === 0) return chalk.white(cell);
+        const trimmed = cell.trim();
+        if (trimmed === '0' || trimmed === '$0.00' || trimmed === '-') return chalk.gray(cell);
+        if (trimmed === 'ERROR') return chalk.red(cell);
+        if (trimmed.startsWith('$')) return chalk.yellow.bold(cell);
+        return chalk.green(cell);
+      }));
+    });
+
+    if (footer) {
+      console.log(chalk.gray('─'.repeat(Math.min(totalWidth, 120))));
+      console.log(renderRow(footer, cell => chalk.yellow.bold(cell)));
+    }
+    console.log();
+  }
+
   showError(message: string, error?: Error): void {
     console.log();
-    console.log(chalk.red.bold('❌ ОШИБКА'));
+    console.log(chalk.red.bold('❌ ERROR'));
     console.log(chalk.red(message));
-    if (error) console.log(chalk.gray('Детали:'), chalk.red(error.message));
+    if (error) console.log(chalk.gray('Details:'), chalk.red(error.message));
     console.log();
   }
 
-  // Показать предупреждение
   showWarning(message: string): void {
     console.log(chalk.yellow('⚠️  ' + message));
   }
 
-  // Показать информацию
   showInfo(message: string): void {
     console.log(chalk.blue('ℹ️  ' + message));
   }
 
-  // Показать успех
   showSuccess(message: string): void {
     console.log(chalk.green('✅ ' + message));
   }
 
-  // Подтверждение действия
   async confirm(message: string, initial: boolean = false): Promise<boolean> {
     const response = await prompts({
       type: 'confirm',
@@ -248,7 +277,6 @@ export class UIService {
     return response.confirmed ?? false;
   }
 
-  // Ввод текста
   async input(message: string, initial?: string): Promise<string> {
     const response = await prompts({
       type: 'text',
@@ -258,4 +286,4 @@ export class UIService {
     });
     return response.value ?? '';
   }
-} 
+}

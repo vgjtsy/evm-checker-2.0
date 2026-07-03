@@ -1,22 +1,12 @@
 import { ethers } from "ethers";
-import { Multicall, ContractCallContext } from "ethereum-multicall";
-import { BalanceProvider, TokenInfo, Network, DEFAULT_DECIMALS, ERC20_ABI, MULTICALL3_ABI, MULTICALL3_CONTRACT } from "../types";
-import { CONFIG } from "../config";
+import { MulticallClient } from "./MulticallClient";
+import { BalanceProvider, TokenInfo, DEFAULT_DECIMALS, ERC20_ABI, MULTICALL3_ABI } from "../types";
+
+const erc20Iface = new ethers.Interface(ERC20_ABI);
+const multicallIface = new ethers.Interface(MULTICALL3_ABI);
 
 export class NativeBalanceProvider implements BalanceProvider {
-  private multicall: Multicall;
-  private multicallAddress: string;
-
-  constructor(network: Network) {
-    const rpcUrl = CONFIG[network].RPC_URL;
-    this.multicallAddress = CONFIG[network].MULTICALL3_CONTRACT ?? MULTICALL3_CONTRACT;
-    
-    this.multicall = new Multicall({
-      nodeUrl: rpcUrl,
-      tryAggregate: true,
-      multicallCustomContractAddress: this.multicallAddress,
-    });
-  }
+  constructor(private client: MulticallClient) {}
 
   async getBalance(address: string): Promise<string> {
     const balances = await this.getBatchBalances([address]);
@@ -24,142 +14,74 @@ export class NativeBalanceProvider implements BalanceProvider {
   }
 
   async getBatchBalances(addresses: string[]): Promise<Map<string, string>> {
-    const ballanceCalls: ContractCallContext[] = [{
-      reference: "multicall3",
-      contractAddress: this.multicallAddress,
-      abi: MULTICALL3_ABI,
-      calls: addresses.map((address) => ({
-        reference: address,
-        methodName: "getEthBalance",
-        methodParameters: [address],
-      })),
-    }];
+    const calls = addresses.map((address) => ({
+      target: this.client.multicallAddress,
+      allowFailure: true,
+      callData: multicallIface.encodeFunctionData("getEthBalance", [address]),
+    }));
 
-    const results = await this.multicall.call(ballanceCalls);
+    const results = await this.client.aggregate3(calls);
+
     const balanceMap = new Map<string, string>();
-
-    const { callsReturnContext } = results.results.multicall3;
-    for (const call of callsReturnContext) {
-      const address = call.reference;
-      try {
-        const balance = BigInt(call.returnValues as unknown as string);
-        balanceMap.set(address, balance ? ethers.formatEther(balance) : "0");
-      } catch {
+    addresses.forEach((address, i) => {
+      const result = results[i];
+      if (result?.success && result.returnData !== "0x") {
+        const [balance] = multicallIface.decodeFunctionResult("getEthBalance", result.returnData);
+        balanceMap.set(address, ethers.formatEther(balance));
+      } else {
         balanceMap.set(address, "0");
       }
-    }
+    });
 
     return balanceMap;
   }
 }
 
 export class ERC20BalanceProvider implements BalanceProvider {
-  private multicall: Multicall;
   private tokenInfo: TokenInfo;
-  private network: Network;
 
-  constructor(network: Network, tokenAddress: string) {
-    const rpcUrl = CONFIG[network].RPC_URL;
-    
-    this.multicall = new Multicall({
-      nodeUrl: rpcUrl,
-      tryAggregate: true,
-      multicallCustomContractAddress: CONFIG[network].MULTICALL3_CONTRACT ?? MULTICALL3_CONTRACT,
-    });
-
+  constructor(private client: MulticallClient, tokenAddress: string) {
     this.tokenInfo = {
       address: tokenAddress,
       symbol: "",
       decimals: DEFAULT_DECIMALS,
       name: "",
     };
-
-    this.network = network;
   }
 
   async initialize(): Promise<void> {
-    // Быстрая инициализация - получаем только decimals и symbol
-    try {
-      const contractCallContext: ContractCallContext[] = [{
-        reference: this.tokenInfo.address,
-        contractAddress: this.tokenInfo.address,
-        abi: ERC20_ABI,
-        calls: [
-          {
-            reference: "symbol",
-            methodName: "symbol",
-            methodParameters: [],
-          },
-          {
-            reference: "decimals",
-            methodName: "decimals",
-            methodParameters: [],
-          }
-        ],
-      }];
+    const calls = ["symbol", "decimals"].map((method) => ({
+      target: this.tokenInfo.address,
+      allowFailure: true,
+      callData: erc20Iface.encodeFunctionData(method, []),
+    }));
 
-      const results = await this.multicall.call(contractCallContext);
-      const tokenResults = results.results[this.tokenInfo.address];
-      
-      if (tokenResults?.callsReturnContext) {
-        for (const call of tokenResults.callsReturnContext) {
-          if (call.success && call.returnValues) {
-            if (call.reference === "symbol") {
-              // Декодируем hex строку для symbol
-              try {
-                const hexValue = call.returnValues as unknown;
-                if (typeof hexValue === 'string' && hexValue.startsWith('0x')) {
-                  // Декодируем как string из ABI
-                  const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-                  const decoded = abiCoder.decode(['string'], hexValue);
-                  if (decoded && decoded[0]) {
-                    this.tokenInfo.symbol = decoded[0];
-                  }
-                }
-              } catch (error) {
-                // Игнорируем ошибки декодирования
-              }
-            } else if (call.reference === "decimals" && call.returnValues) {
-              // Декодируем decimals
-              try {
-                const hexValue = call.returnValues as unknown as string;
-                if (typeof hexValue === 'string' && hexValue.startsWith('0x')) {
-                  // Decimals возвращается как uint8, парсим hex с помощью ethers.BigInt
-                  const decimals = Number(ethers.toBigInt(hexValue));
-                  if (!isNaN(decimals) && decimals >= 0 && decimals <= 255) {
-                    this.tokenInfo.decimals = decimals;
-                  }
-                }
-              } catch (error) {
-                // Игнорируем ошибки декодирования
-              }
-            }
-          }
-        }
-      }
+    const [symbolResult, decimalsResult] = await this.client.aggregate3(calls);
 
-      // Если символ всё ещё пустой, попробуем получить его напрямую
-      if (!this.tokenInfo.symbol || this.tokenInfo.symbol === '0') {
+    if (symbolResult?.success && symbolResult.returnData !== "0x") {
+      try {
+        const [symbol] = erc20Iface.decodeFunctionResult("symbol", symbolResult.returnData);
+        if (symbol) this.tokenInfo.symbol = String(symbol);
+      } catch {
+        // Some tokens (e.g. MKR) return symbol as bytes32
         try {
-          const rpcUrl = CONFIG[this.network].RPC_URL;
-          const provider = new ethers.JsonRpcProvider(rpcUrl);
-          const contract = new ethers.Contract(this.tokenInfo.address, ERC20_ABI, provider);
-          const symbol = await contract.symbol();
-          if (symbol && typeof symbol === 'string' && symbol !== '0') {
-            this.tokenInfo.symbol = symbol;
-          }
+          this.tokenInfo.symbol = ethers.decodeBytes32String(symbolResult.returnData);
         } catch {
-          // Игнорируем ошибки прямого вызова
+          // leave empty — WalletChecker will use a fallback header
         }
       }
+    }
 
-
-
-    } catch (error) {
-      console.error(`Ошибка инициализации токена ${this.tokenInfo.address}:`, error);
-      // Fallback значения при ошибке
-      this.tokenInfo.symbol = "UNKNOWN";
-      this.tokenInfo.decimals = DEFAULT_DECIMALS;
+    if (decimalsResult?.success && decimalsResult.returnData !== "0x") {
+      try {
+        const [decimals] = erc20Iface.decodeFunctionResult("decimals", decimalsResult.returnData);
+        const parsed = Number(decimals);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 255) {
+          this.tokenInfo.decimals = parsed;
+        }
+      } catch {
+        // keep DEFAULT_DECIMALS
+      }
     }
   }
 
@@ -173,56 +95,29 @@ export class ERC20BalanceProvider implements BalanceProvider {
   }
 
   async getBatchBalances(addresses: string[]): Promise<Map<string, string>> {
-    const contractCallContext: ContractCallContext[] = [{
-      reference: this.tokenInfo.address,
-      contractAddress: this.tokenInfo.address,
-      abi: ERC20_ABI,
-      calls: addresses.map((address) => ({
-        reference: address,
-        methodName: "balanceOf",
-        methodParameters: [address],
-      })),
-    }];
+    const calls = addresses.map((address) => ({
+      target: this.tokenInfo.address,
+      allowFailure: true,
+      callData: erc20Iface.encodeFunctionData("balanceOf", [address]),
+    }));
 
-    const results = await this.multicall.call(contractCallContext);
+    const results = await this.client.aggregate3(calls);
+
     const balanceMap = new Map<string, string>();
-
-    const tokenResults = results.results[this.tokenInfo.address];
-    
-    if (tokenResults?.callsReturnContext) {
-      for (const call of tokenResults.callsReturnContext) {
-        const address = call.reference;
+    addresses.forEach((address, i) => {
+      const result = results[i];
+      if (result?.success && result.returnData !== "0x") {
         try {
-          if (call.success && call.returnValues) {
-            // returnValues приходит как hex строка
-            const rawBalance = call.returnValues;
-            
-            if (rawBalance && typeof rawBalance === 'string' && 
-                rawBalance !== '0x' && 
-                rawBalance !== '0x0' && 
-                rawBalance !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-              const balance = ethers.formatUnits(rawBalance, this.tokenInfo.decimals);
-              balanceMap.set(address, balance);
-            } else {
-              balanceMap.set(address, "0");
-            }
-          } else {
-            balanceMap.set(address, "0");
-          }
-        } catch (error) {
-          console.error(`❌ Ошибка обработки баланса для ${address}:`, error);
+          const [balance] = erc20Iface.decodeFunctionResult("balanceOf", result.returnData);
+          balanceMap.set(address, ethers.formatUnits(balance, this.tokenInfo.decimals));
+        } catch {
           balanceMap.set(address, "0");
         }
-      }
-    }
-
-    // Убеждаемся что все адреса есть в результате
-    addresses.forEach(address => {
-      if (!balanceMap.has(address)) {
+      } else {
         balanceMap.set(address, "0");
       }
     });
 
     return balanceMap;
   }
-} 
+}

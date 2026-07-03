@@ -1,9 +1,11 @@
 import { Network } from "../types";
 
-// Единая конфигурация всех сетей
+// Unified configuration for all networks
 export const NETWORKS_CONFIG = {
   [Network.ABSTRACT]: {
+    CHAIN_ID: 2741,
     RPC_URL: "https://api.mainnet.abs.xyz",
+    FALLBACK_RPC_URLS: ["https://abstract.drpc.org"],
     NAME: "Abstract",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -12,14 +14,18 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.APECHAIN]: {
+    CHAIN_ID: 33139,
     RPC_URL: "https://rpc.apechain.com",
+    FALLBACK_RPC_URLS: ["https://apechain.drpc.org"],
     NAME: "ApeChain",
     NATIVE_CURRENCY: "APE",
     TOKENS: {}
   },
 
   [Network.ARBITRUM]: {
-    RPC_URL: "https://arbitrum-one.public.blastapi.io",
+    CHAIN_ID: 42161,
+    RPC_URL: "https://arb1.arbitrum.io/rpc",
+    FALLBACK_RPC_URLS: ["https://arbitrum-one-rpc.publicnode.com", "https://arbitrum.drpc.org", "https://arbitrum-one.public.blastapi.io"],
     NAME: "Arbitrum",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -32,7 +38,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.ARBITRUM_NOVA]: {
-    RPC_URL: "https://arbitrum-nova.public.blastapi.io",
+    CHAIN_ID: 42170,
+    RPC_URL: "https://nova.arbitrum.io/rpc",
+    FALLBACK_RPC_URLS: ["https://arbitrum-nova-rpc.publicnode.com"],
     NAME: "Arbitrum Nova",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -43,7 +51,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.AVALANCHE]: {
-    RPC_URL: "https://ava-mainnet.public.blastapi.io/ext/bc/C/rpc",
+    CHAIN_ID: 43114,
+    RPC_URL: "https://api.avax.network/ext/bc/C/rpc",
+    FALLBACK_RPC_URLS: ["https://avalanche-c-chain-rpc.publicnode.com"],
     NAME: "Avalanche",
     NATIVE_CURRENCY: "AVAX",
     TOKENS: {
@@ -56,7 +66,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.BASE]: {
-    RPC_URL: "https://base-mainnet.public.blastapi.io",
+    CHAIN_ID: 8453,
+    RPC_URL: "https://mainnet.base.org",
+    FALLBACK_RPC_URLS: ["https://base-rpc.publicnode.com", "https://base.drpc.org", "https://base-mainnet.public.blastapi.io"],
     NAME: "Base",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -74,6 +86,7 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.BASE_SEPOLIA]: {
+    CHAIN_ID: 84532,
     RPC_URL: "https://sepolia.base.org",
     NAME: "Base Sepolia",
     NATIVE_CURRENCY: "ETH",
@@ -96,7 +109,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.BERACHAIN]: {
+    CHAIN_ID: 80094,
     RPC_URL: "https://berachain-rpc.publicnode.com",
+    FALLBACK_RPC_URLS: ["https://rpc.berachain.com"],
     NAME: "Berachain",
     NATIVE_CURRENCY: "BERA",
     TOKENS: {
@@ -107,7 +122,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.BLAST]: {
-    RPC_URL: "https://blastl2-mainnet.public.blastapi.io",
+    CHAIN_ID: 81457,
+    RPC_URL: "https://rpc.blast.io",
+    FALLBACK_RPC_URLS: ["https://blast-rpc.publicnode.com"],
     NAME: "Blast",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -118,19 +135,23 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.BNB]: {
-    RPC_URL: "https://bsc-mainnet.public.blastapi.io",
+    CHAIN_ID: 56,
+    RPC_URL: "https://bsc-dataseed.bnbchain.org",
+    FALLBACK_RPC_URLS: ["https://bsc-rpc.publicnode.com", "https://bsc-mainnet.public.blastapi.io"],
     NAME: "BNB Chain",
     NATIVE_CURRENCY: "BNB",
     TOKENS: {
       // USDT: "0x55d398326f99059ff775485246999027b3197955",
       // USDC: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
-      TURTLE: "0x66fd8de541c0594b4dccdfc13bf3a390e50d3afd",
+      // TURTLE: "0x66fd8de541c0594b4dccdfc13bf3a390e50d3afd",
       // EURA: "0x12f31b73d812c6bb0d735a218c086d44d5fe5f89",
     }
   },
 
   [Network.CELO]: {
+    CHAIN_ID: 42220,
     RPC_URL: "https://celo.drpc.org",
+    FALLBACK_RPC_URLS: ["https://forno.celo.org"],
     NAME: "Celo",
     NATIVE_CURRENCY: "CELO",
     TOKENS: {
@@ -140,7 +161,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.ETHEREUM]: {
+    CHAIN_ID: 1,
     RPC_URL: "https://eth.drpc.org",
+    FALLBACK_RPC_URLS: ["https://ethereum-rpc.publicnode.com", "https://1rpc.io/eth"],
     NAME: "Ethereum",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -151,6 +174,7 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.ETHEREUM_SEPOLIA]: {
+    CHAIN_ID: 11155111,
     RPC_URL: "https://ethereum-sepolia.publicnode.com",
     NAME: "Ethereum Sepolia",
     NATIVE_CURRENCY: "ETH",
@@ -160,7 +184,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.FANTOM]: {
-    RPC_URL: "https://fantom-mainnet.public.blastapi.io",
+    CHAIN_ID: 250,
+    RPC_URL: "https://rpcapi.fantom.network",
+    FALLBACK_RPC_URLS: ["https://fantom.drpc.org"],
     NAME: "Fantom",
     NATIVE_CURRENCY: "FTM",
     TOKENS: {
@@ -172,7 +198,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.GNOSIS]: {
-    RPC_URL: "https://gnosis-mainnet.public.blastapi.io",
+    CHAIN_ID: 100,
+    RPC_URL: "https://rpc.gnosischain.com",
+    FALLBACK_RPC_URLS: ["https://gnosis-rpc.publicnode.com"],
     NAME: "Gnosis",
     NATIVE_CURRENCY: "xDAI",
     TOKENS: {
@@ -181,7 +209,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.HARMONY]: {
+    CHAIN_ID: 1666600000,
     RPC_URL: "https://1rpc.io/one",
+    FALLBACK_RPC_URLS: ["https://api.harmony.one"],
     NAME: "Harmony",
     NATIVE_CURRENCY: "ONE",
     TOKENS: {
@@ -190,7 +220,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.LINEA]: {
-    RPC_URL: "https://linea-mainnet.public.blastapi.io",
+    CHAIN_ID: 59144,
+    RPC_URL: "https://rpc.linea.build",
+    FALLBACK_RPC_URLS: ["https://linea-rpc.publicnode.com"],
     NAME: "Linea",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -203,7 +235,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.OPTIMISM]: {
-    RPC_URL: "https://optimism-mainnet.public.blastapi.io",
+    CHAIN_ID: 10,
+    RPC_URL: "https://mainnet.optimism.io",
+    FALLBACK_RPC_URLS: ["https://optimism-rpc.publicnode.com", "https://optimism.drpc.org"],
     NAME: "Optimism",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -216,7 +250,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.POLYGON]: {
-    RPC_URL: "https://polygon-mainnet.public.blastapi.io",
+    CHAIN_ID: 137,
+    RPC_URL: "https://polygon-bor-rpc.publicnode.com",
+    FALLBACK_RPC_URLS: ["https://polygon.drpc.org", "https://1rpc.io/matic"],
     NAME: "Polygon",
     NATIVE_CURRENCY: "MATIC",
     TOKENS: {
@@ -228,7 +264,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.RONIN]: {
+    CHAIN_ID: 2020,
     RPC_URL: "https://api.roninchain.com/rpc",
+    FALLBACK_RPC_URLS: ["https://ronin.drpc.org"],
     NAME: "Ronin",
     NATIVE_CURRENCY: "RON",
     TOKENS: {
@@ -239,7 +277,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.SCROLL]: {
-    RPC_URL: "https://scroll-mainnet.public.blastapi.io",
+    CHAIN_ID: 534352,
+    RPC_URL: "https://rpc.scroll.io",
+    FALLBACK_RPC_URLS: ["https://scroll-rpc.publicnode.com"],
     NAME: "Scroll",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -251,6 +291,7 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.SHAPE]: {
+    CHAIN_ID: 360,
     RPC_URL: "https://mainnet.shape.network",
     NAME: "Shape",
     NATIVE_CURRENCY: "ETH",
@@ -260,7 +301,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.SONEIUM]: {
+    CHAIN_ID: 1868,
     RPC_URL: "https://rpc.soneium.org",
+    FALLBACK_RPC_URLS: ["https://soneium.drpc.org"],
     NAME: "Soneium",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -269,7 +312,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.UNICHAIN]: {
+    CHAIN_ID: 130,
     RPC_URL: "https://unichain-rpc.publicnode.com",
+    FALLBACK_RPC_URLS: ["https://mainnet.unichain.org"],
     NAME: "Unichain",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -278,7 +323,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.ZKSYNC]: {
-    RPC_URL: "https://zksync-mainnet.public.blastapi.io",
+    CHAIN_ID: 324,
+    RPC_URL: "https://mainnet.era.zksync.io",
+    FALLBACK_RPC_URLS: ["https://zksync.drpc.org"],
     NAME: "zkSync",
     NATIVE_CURRENCY: "ETH",
     MULTICALL3_CONTRACT: "0x47898B2C52C957663aE9AB46922dCec150a2272c",
@@ -292,7 +339,9 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.ZORA]: {
+    CHAIN_ID: 7777777,
     RPC_URL: "https://rpc.zerion.io/v1/zora",
+    FALLBACK_RPC_URLS: ["https://rpc.zora.energy"],
     NAME: "Zora",
     NATIVE_CURRENCY: "ETH",
     TOKENS: {
@@ -303,6 +352,7 @@ export const NETWORKS_CONFIG = {
   },
 
   [Network.ZERO]: {
+    CHAIN_ID: 543210,
     RPC_URL: "https://rpc.zerion.io/v1/zero",
     NAME: "Zero",
     NATIVE_CURRENCY: "ETH",
@@ -312,4 +362,129 @@ export const NETWORKS_CONFIG = {
       // NFT_CLNY_AVATAR: "0xa3468e60d28402a51f1ff54ede10f7cda56d1a72",
     }
   },
-}; 
+
+  [Network.MANTLE]: {
+    CHAIN_ID: 5000,
+    RPC_URL: "https://rpc.mantle.xyz",
+    FALLBACK_RPC_URLS: ["https://mantle-rpc.publicnode.com", "https://mantle.drpc.org"],
+    NAME: "Mantle",
+    NATIVE_CURRENCY: "MNT",
+    TOKENS: {}
+  },
+
+  [Network.METIS]: {
+    CHAIN_ID: 1088,
+    RPC_URL: "https://andromeda.metis.io/?owner=1088",
+    FALLBACK_RPC_URLS: ["https://metis.drpc.org", "https://metis-pokt.nodies.app"],
+    NAME: "Metis",
+    NATIVE_CURRENCY: "METIS",
+    TOKENS: {}
+  },
+
+  [Network.MODE]: {
+    CHAIN_ID: 34443,
+    RPC_URL: "https://mainnet.mode.network",
+    FALLBACK_RPC_URLS: ["https://mode.drpc.org"],
+    NAME: "Mode",
+    NATIVE_CURRENCY: "ETH",
+    TOKENS: {}
+  },
+
+  [Network.OPBNB]: {
+    CHAIN_ID: 204,
+    RPC_URL: "https://opbnb-mainnet-rpc.bnbchain.org",
+    FALLBACK_RPC_URLS: ["https://opbnb-rpc.publicnode.com", "https://opbnb.drpc.org"],
+    NAME: "opBNB",
+    NATIVE_CURRENCY: "BNB",
+    TOKENS: {}
+  },
+
+  [Network.MOONBEAM]: {
+    CHAIN_ID: 1284,
+    RPC_URL: "https://rpc.api.moonbeam.network",
+    FALLBACK_RPC_URLS: ["https://moonbeam-rpc.publicnode.com", "https://moonbeam.drpc.org"],
+    NAME: "Moonbeam",
+    NATIVE_CURRENCY: "GLMR",
+    TOKENS: {}
+  },
+
+  [Network.MOONRIVER]: {
+    CHAIN_ID: 1285,
+    RPC_URL: "https://rpc.api.moonriver.moonbeam.network",
+    FALLBACK_RPC_URLS: ["https://moonriver-rpc.publicnode.com", "https://moonriver.drpc.org"],
+    NAME: "Moonriver",
+    NATIVE_CURRENCY: "MOVR",
+    TOKENS: {}
+  },
+
+  [Network.KAVA]: {
+    CHAIN_ID: 2222,
+    RPC_URL: "https://evm.kava.io",
+    FALLBACK_RPC_URLS: ["https://kava.drpc.org", "https://evm.kava-rpc.com"],
+    NAME: "Kava",
+    NATIVE_CURRENCY: "KAVA",
+    TOKENS: {}
+  },
+
+  [Network.MANTA]: {
+    CHAIN_ID: 169,
+    RPC_URL: "https://pacific-rpc.manta.network/http",
+    FALLBACK_RPC_URLS: ["https://manta-pacific.drpc.org", "https://1rpc.io/manta"],
+    NAME: "Manta Pacific",
+    NATIVE_CURRENCY: "ETH",
+    TOKENS: {}
+  },
+
+  [Network.PULSECHAIN]: {
+    CHAIN_ID: 369,
+    RPC_URL: "https://rpc.pulsechain.com",
+    FALLBACK_RPC_URLS: ["https://pulsechain-rpc.publicnode.com", "https://rpc-pulsechain.g4mm4.io"],
+    NAME: "PulseChain",
+    NATIVE_CURRENCY: "PLS",
+    TOKENS: {}
+  },
+
+  [Network.SONIC]: {
+    CHAIN_ID: 146,
+    RPC_URL: "https://rpc.soniclabs.com",
+    FALLBACK_RPC_URLS: ["https://sonic-rpc.publicnode.com", "https://sonic.drpc.org"],
+    NAME: "Sonic",
+    NATIVE_CURRENCY: "S",
+    TOKENS: {}
+  },
+
+  [Network.TAIKO]: {
+    CHAIN_ID: 167000,
+    RPC_URL: "https://rpc.mainnet.taiko.xyz",
+    FALLBACK_RPC_URLS: ["https://rpc.taiko.xyz", "https://taiko.drpc.org"],
+    NAME: "Taiko",
+    NATIVE_CURRENCY: "ETH",
+    TOKENS: {}
+  },
+
+  [Network.WORLDCHAIN]: {
+    CHAIN_ID: 480,
+    RPC_URL: "https://worldchain-mainnet.gateway.tenderly.co",
+    FALLBACK_RPC_URLS: ["https://480.rpc.thirdweb.com", "https://worldchain.drpc.org"],
+    NAME: "World Chain",
+    NATIVE_CURRENCY: "ETH",
+    TOKENS: {}
+  },
+
+  [Network.INK]: {
+    CHAIN_ID: 57073,
+    RPC_URL: "https://rpc-gel.inkonchain.com",
+    FALLBACK_RPC_URLS: ["https://rpc-qnd.inkonchain.com", "https://ink.drpc.org"],
+    NAME: "Ink",
+    NATIVE_CURRENCY: "ETH",
+    TOKENS: {}
+  },
+
+  [Network.GRAVITY]: {
+    CHAIN_ID: 1625,
+    RPC_URL: "https://rpc.gravity.xyz",
+    NAME: "Gravity",
+    NATIVE_CURRENCY: "G",
+    TOKENS: {}
+  },
+};

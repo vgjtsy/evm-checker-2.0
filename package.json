@@ -1,7 +1,8 @@
 {
   "name": "evm-checker",
-  "version": "1.0.0",
-  "description": "",
+  "version": "2.0.0",
+  "description": "Fast multi-chain EVM wallet balance checker with USD valuation (25+ networks, Multicall3)",
+  "homepage": "https://x.com/polydao",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -33,6 +34,20 @@
     "zksync": "npx tsx index.ts zksync",
     "zora": "npx tsx index.ts zora",
     "zero": "npx tsx index.ts zero",
+    "mantle": "npx tsx index.ts mantle",
+    "metis": "npx tsx index.ts metis",
+    "mode": "npx tsx index.ts mode",
+    "opbnb": "npx tsx index.ts opbnb",
+    "moonbeam": "npx tsx index.ts moonbeam",
+    "moonriver": "npx tsx index.ts moonriver",
+    "kava": "npx tsx index.ts kava",
+    "manta": "npx tsx index.ts manta",
+    "pulsechain": "npx tsx index.ts pulsechain",
+    "sonic": "npx tsx index.ts sonic",
+    "taiko": "npx tsx index.ts taiko",
+    "worldchain": "npx tsx index.ts worldchain",
+    "ink": "npx tsx index.ts ink",
+    "gravity": "npx tsx index.ts gravity",
     "postinstall": "npx touch wallets.txt"
   },
   "author": "raznorabochiy",
@@ -40,18 +55,13 @@
   "dependencies": {
     "@types/prompts": "^2.4.9",
     "chalk": "^5.4.1",
-    "cli": "^1.0.1",
-    "ethereum-multicall": "^2.23.0",
     "ethers": "^6.3.0",
-    "inquirer": "^12.9.4",
     "ora": "^8.2.0",
     "prompts": "^2.4.2",
     "touch": "^3.1.0",
     "tsx": "^4.7.1"
   },
   "devDependencies": {
-    "@types/cli": "^0.11.25",
-    "@types/inquirer": "^9.0.7",
     "@types/node": "^20.12.2"
   }
 }

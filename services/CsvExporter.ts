@@ -1,246 +1,280 @@
-import fs, { WriteStream } from "fs";
+import fs from "fs";
 import path from "path";
-import { ResultExporter, WalletBalance, CheckerConfig, AllNetworksCheckResult, Network } from "../types";
+import { WalletBalance, CheckerConfig, AllNetworksCheckResult, Network } from "../types";
 import { CONFIG } from "../config";
+import { SETTINGS } from "../config/settings";
+import { PriceService } from "./PriceService";
 
-export class CsvExporter implements ResultExporter {
-  private stream: WriteStream | null = null;
-  private rows: (string | number)[][] = [];
-  private readonly CSV_DELIMITER = ";";
-  private readonly RESULTS_FOLDER = "results";
+const CSV_DELIMITER = SETTINGS.output.csvDelimiter;
+const RESULTS_FOLDER = SETTINGS.resultsDir;
+
+// Wallet row before writing: cells + data for the dust filter
+interface WalletRow {
+  cells: string[];
+  hasBalance: boolean; // at least one token with balance > 0
+  hasUnpricedBalance: boolean; // has balance in a token without a known price
+  totalUsd: number | null; // null — prices unavailable
+}
+
+export interface ExportResult {
+  mainFile: string;
+  nonZeroFile: string | null; // null — no wallets passed the filter
+  nonZeroCount: number;
+}
+
+export class CsvExporter {
+  constructor(private dustThresholdUsd: number = 0) {}
 
   async exportSingleNetwork(
-    data: WalletBalance[], 
+    data: WalletBalance[],
     config: CheckerConfig,
-    tokenHeaders: string[]
-  ): Promise<void> {
-    // Создаем папку results если её нет
-    if (!fs.existsSync(this.RESULTS_FOLDER)) {
-      fs.mkdirSync(this.RESULTS_FOLDER, { recursive: true });
+    tokenHeaders: string[],
+    prices: PriceService | null = null
+  ): Promise<ExportResult> {
+    const network = config.network;
+    const usdEnabled = prices?.isAvailable() ?? false;
+
+    const hasPrivateKeys = data.some(d => d.wallet.privateKey);
+    const walletColumns = hasPrivateKeys ? ["Address", "PrivateKey"] : ["Address"];
+    const header = [...walletColumns, ...tokenHeaders, ...(usdEnabled ? ["Total USD"] : [])];
+
+    const rows: WalletRow[] = data.map(walletData => {
+      const walletInfo = hasPrivateKeys
+        ? [walletData.wallet.address, walletData.wallet.privateKey || ""]
+        : [walletData.wallet.address];
+
+      const balances = config.tokens.map(token => walletData.balances.get(token) || "0");
+
+      let hasBalance = false;
+      let hasUnpricedBalance = false;
+      let totalUsd: number | null = usdEnabled ? 0 : null;
+
+      config.tokens.forEach((token, i) => {
+        const amount = parseFloat(balances[i]);
+        if (isNaN(amount) || amount <= 0) return; // "ERROR" or zero
+        hasBalance = true;
+
+        if (usdEnabled) {
+          const price = prices!.getPrice(network, token);
+          if (price !== undefined) {
+            totalUsd = (totalUsd || 0) + amount * price;
+          } else {
+            hasUnpricedBalance = true;
+          }
+        }
+      });
+
+      const cells = [
+        ...walletInfo,
+        ...balances,
+        ...(usdEnabled ? [this.formatUsd(totalUsd || 0)] : [])
+      ];
+
+      return { cells, hasBalance, hasUnpricedBalance, totalUsd };
+    });
+
+    const numericColCount = tokenHeaders.length + (usdEnabled ? 1 : 0);
+    const mainFile = path.join(RESULTS_FOLDER, `${network}.csv`);
+    this.writeCsvFile(mainFile, header, rows, walletColumns.length, numericColCount, data.length);
+
+    const nonZeroRows = rows.filter(row => this.passesDustFilter(row));
+    let nonZeroFile: string | null = null;
+    if (nonZeroRows.length > 0) {
+      nonZeroFile = path.join(RESULTS_FOLDER, `${network}_nonzero.csv`);
+      this.writeCsvFile(nonZeroFile, header, nonZeroRows, walletColumns.length, numericColCount, nonZeroRows.length);
     }
 
-    const filename = path.join(this.RESULTS_FOLDER, `${config.network}.csv`);
-    this.stream = fs.createWriteStream(filename);
-
-    try {
-      // Формируем заголовок CSV
-      const hasPrivateKeys = data.some(d => d.wallet.privateKey);
-      const walletColumns = hasPrivateKeys ? ["Address", "PrivateKey"] : ["Address"];
-      const csvHeader = [...walletColumns, ...tokenHeaders];
-      
-      this.writeRow(csvHeader);
-
-      // Записываем данные
-      for (const walletData of data) {
-        const walletInfo = hasPrivateKeys 
-          ? [walletData.wallet.address, walletData.wallet.privateKey || ""]
-          : [walletData.wallet.address];
-        
-        const balances = config.tokens.map(token => 
-          walletData.balances.get(token) || "0"
-        );
-        
-        const row = [...walletInfo, ...balances];
-        this.writeRow(row);
-      }
-
-      // Добавляем итоговую строку
-      this.addTotalRow(hasPrivateKeys, tokenHeaders.length, data.length);
-
-      // Закрываем поток
-      await this.close();
-      
-      console.log(`✅ Результаты для сети ${CONFIG[config.network].NAME || config.network} сохранены в ${filename}`);
-    } catch (error) {
-      console.error("Ошибка при экспорте в CSV:", error);
-      throw error;
-    }
+    return { mainFile, nonZeroFile, nonZeroCount: nonZeroRows.length };
   }
 
   async exportAllNetworks(
     allNetworksResults: AllNetworksCheckResult[],
+    prices: PriceService | null = null,
     filename: string = "all_networks_balances.csv"
-  ): Promise<void> {
-    if (!fs.existsSync(this.RESULTS_FOLDER)) {
-      fs.mkdirSync(this.RESULTS_FOLDER, { recursive: true });
-    }
+  ): Promise<ExportResult> {
+    const usdEnabled = prices?.isAvailable() ?? false;
 
-    const fullPath = path.join(this.RESULTS_FOLDER, filename);
-    this.stream = fs.createWriteStream(fullPath);
-
-    try {
-      // Собираем все уникальные адреса кошельков
-      const uniqueWallets = new Map<string, string | undefined>(); // address -> privateKey
-      allNetworksResults.forEach(netResult => {
-        netResult.results.forEach(walletBalance => {
-          if (!uniqueWallets.has(walletBalance.wallet.address)) {
-            uniqueWallets.set(walletBalance.wallet.address, walletBalance.wallet.privateKey);
-          }
-        });
-      });
-
-      const hasPrivateKeys = Array.from(uniqueWallets.values()).some(pk => pk !== undefined);
-      const walletColumns = hasPrivateKeys ? ["Address", "PrivateKey"] : ["Address"];
-
-      // Собираем все уникальные заголовки токенов по всем сетям и сортируем их
-      const allTokenHeadersRaw: { network: Network; header: string; displayHeader: string; nativeCurrency: string }[] = [];
-      const uniqueHeaderKeys = new Set<string>();
-
-      allNetworksResults.forEach(netResult => {
-        const networkName = CONFIG[netResult.network]?.NAME || netResult.network;
-        const nativeCurrency = CONFIG[netResult.network]?.NATIVE_CURRENCY || 'ETH';
-
-        netResult.tokenHeaders.forEach(header => {
-          const uniqueHeaderKey = `${netResult.network}_${header}`;
-          if (!uniqueHeaderKeys.has(uniqueHeaderKey)) {
-            uniqueHeaderKeys.add(uniqueHeaderKey);
-            allTokenHeadersRaw.push({
-              network: netResult.network,
-              header,
-              displayHeader: `${header} (${networkName})`,
-              nativeCurrency
-            });
-          }
-        });
-      });
-
-      // Пользовательская сортировка:
-      // 1. Сети с нативной валютой ETH, затем остальные
-      // 2. Внутри группы - по названию сети (алфавитный порядок)
-      // 3. Внутри сети - сначала нативная валюта, затем ERC-20 токены (алфавитный порядок)
-      const sortedAllTokenHeaders = allTokenHeadersRaw.sort((a, b) => {
-        // Группировка по типу нативной валюты (ETH сначала)
-        const isANativeETH = a.nativeCurrency === 'ETH';
-        const isBNativeETH = b.nativeCurrency === 'ETH';
-
-        if (isANativeETH && !isBNativeETH) return -1;
-        if (!isANativeETH && isBNativeETH) return 1;
-
-        // Если нативные валюты одинакового типа, сортируем по названию сети
-        const networkNameA = CONFIG[a.network]?.NAME || a.network;
-        const networkNameB = CONFIG[b.network]?.NAME || b.network;
-        const networkCompare = networkNameA.localeCompare(networkNameB);
-        if (networkCompare !== 0) return networkCompare;
-
-        // Внутри одной сети: сначала нативная валюта, затем остальные токены
-        const isANativeToken = a.header === a.nativeCurrency || (a.header === 'Native' && a.nativeCurrency === 'ETH');
-        const isBNativeToken = b.header === b.nativeCurrency || (b.header === 'Native' && b.nativeCurrency === 'ETH');
-
-        if (isANativeToken && !isBNativeToken) return -1;
-        if (!isANativeToken && isBNativeToken) return 1;
-
-        // Если оба токена нативные или оба ERC-20, сортируем по заголовку токена
-        return a.header.localeCompare(b.header);
-      }).map(item => item.displayHeader);
-
-      const csvHeader = [...walletColumns, ...sortedAllTokenHeaders];
-      this.writeRow(csvHeader);
-
-      // Записываем данные для каждого кошелька
-      for (const [address, privateKey] of uniqueWallets.entries()) {
-        const walletInfo = hasPrivateKeys 
-          ? [address, privateKey || ""]
-          : [address];
-        
-        const rowBalances: (string | number)[] = [];
-        
-        sortedAllTokenHeaders.forEach(displayHeader => {
-          let foundBalance = "0";
-          // Ищем баланс для текущего токена в нужной сети
-          for (const netResult of allNetworksResults) {
-            const networkName = CONFIG[netResult.network]?.NAME || netResult.network;
-            // Определяем исходный заголовок токена из displayHeader
-            const originalTokenHeader = displayHeader.replace(` (${networkName})`, '');
-            
-            const walletBalance = netResult.results.find(wb => wb.wallet.address === address);
-            if (walletBalance) {
-              // Находим токен по его originalTokenHeader или по его имени в Config.TOKENS
-              const tokenAddressInConfig = Object.entries(CONFIG[netResult.network].TOKENS).find(([name]) => name === originalTokenHeader)?.[1];
-
-              let balanceValue = "0";
-              if (originalTokenHeader === CONFIG[netResult.network].NATIVE_CURRENCY || originalTokenHeader === "Native") {
-                balanceValue = walletBalance.balances.get("native") || "0";
-              } else if (tokenAddressInConfig) {
-                balanceValue = walletBalance.balances.get(tokenAddressInConfig) || "0";
-              } else {
-                // Если заголовок не соответствует ни нативному, ни конфигу, ищем по тому, что пришло от чекера
-                // Это может быть токен, у которого символ не совпал с названием в конфиге
-                // Нам нужно найти соответствие между originalTokenHeader и фактическим символом токена, который вернул checker.getTokenHeaders()
-                const checkerTokenIndex = netResult.tokenHeaders.indexOf(originalTokenHeader);
-                if (checkerTokenIndex !== -1) {
-                  const actualTokenAddress = CONFIG[netResult.network].COLUMNS[checkerTokenIndex];
-                  balanceValue = walletBalance.balances.get(actualTokenAddress) || "0";
-                }
-              }
-              
-              if (parseFloat(balanceValue) > 0) {
-                foundBalance = balanceValue;
-                break; // Баланс найден, переходим к следующему заголовку
-              }
-            }
-          }
-          rowBalances.push(foundBalance);
-        });
-        this.writeRow([...walletInfo, ...rowBalances]);
-      }
-      
-      this.addTotalRow(hasPrivateKeys, sortedAllTokenHeaders.length, uniqueWallets.size);
-
-      await this.close();
-      console.log(`✅ Сводные результаты по всем сетям сохранены в ${fullPath}`);
-
-    } catch (error) {
-      console.error("Ошибка при экспорте сводных данных в CSV:", error);
-      throw error;
-    }
-  }
-
-  private writeRow(data: (string | number)[]): void {
-    if (!this.stream) return;
-    
-    this.rows.push(data);
-    const line = data.join(this.CSV_DELIMITER) + "\n";
-    this.stream.write(line);
-  }
-
-  private addTotalRow(hasPrivateKeys: boolean, tokenCount: number, totalWallets: number): void {
-    if (this.rows.length < 2) return; 
-
-    const dataRows = this.rows.slice(1); // Пропускаем заголовок
-    const startColumn = hasPrivateKeys ? 2 : 1;
-    
-    const totals: (string | number)[] = [];
-    
-    totals.push("Total balance:");
-    if (hasPrivateKeys) {
-      totals.push("");
-    }
-    
-    for (let colIndex = startColumn; colIndex < startColumn + tokenCount; colIndex++) {
-      const sum = dataRows.reduce((acc, row) => {
-        const value = parseFloat(row[colIndex] as string) || 0;
-        return acc + value;
-      }, 0);
-      
-      // Форматируем число с учетом DEFAULT_DECIMALS, убирая экспоненциальную запись и лишние нули
-      totals.push(sum.toFixed(18).replace(/(\.0*|(?<=(\.\d*?[1-9]))0+)$/, ''));
-    }
-
-    this.stream?.write("\n");
-    this.writeRow(totals);
-  }
-
-  private close(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.stream) {
-        resolve();
-        return;
-      }
-
-      this.stream.close((err) => {
-        if (err) reject(err); 
-        else resolve();
+    // Unique wallets (address -> privateKey)
+    const uniqueWallets = new Map<string, string | undefined>();
+    allNetworksResults.forEach(netResult => {
+      netResult.results.forEach(wb => {
+        if (!uniqueWallets.has(wb.wallet.address)) {
+          uniqueWallets.set(wb.wallet.address, wb.wallet.privateKey);
+        }
       });
     });
+
+    const hasPrivateKeys = Array.from(uniqueWallets.values()).some(pk => pk !== undefined);
+    const walletColumns = hasPrivateKeys ? ["Address", "PrivateKey"] : ["Address"];
+
+    // Columns: (network, token). The checker's tokenHeaders follow the order of
+    // the config COLUMNS, so we resolve the token key by index — no fragile
+    // header parsing.
+    interface Column {
+      network: Network;
+      header: string;
+      tokenKey: string; // "native" or token address
+      displayHeader: string;
+      nativeCurrency: string;
+    }
+
+    const columns: Column[] = [];
+    const seenColumns = new Set<string>();
+
+    allNetworksResults.forEach(netResult => {
+      const networkConfig = CONFIG[netResult.network];
+      const networkName = networkConfig?.NAME || netResult.network;
+      const nativeCurrency = networkConfig?.NATIVE_CURRENCY || "ETH";
+
+      netResult.tokenHeaders.forEach((header, i) => {
+        const key = `${netResult.network}_${header}`;
+        if (seenColumns.has(key)) return;
+        seenColumns.add(key);
+
+        columns.push({
+          network: netResult.network,
+          header,
+          tokenKey: networkConfig?.COLUMNS[i] || "native",
+          displayHeader: `${header} (${networkName})`,
+          nativeCurrency
+        });
+      });
+    });
+
+    // Sort: ETH-native networks first, then by network name; within a network
+    // the native currency comes first, remaining tokens alphabetically
+    columns.sort((a, b) => {
+      const isANativeETH = a.nativeCurrency === "ETH";
+      const isBNativeETH = b.nativeCurrency === "ETH";
+      if (isANativeETH !== isBNativeETH) return isANativeETH ? -1 : 1;
+
+      const networkNameA = CONFIG[a.network]?.NAME || a.network;
+      const networkNameB = CONFIG[b.network]?.NAME || b.network;
+      const networkCompare = networkNameA.localeCompare(networkNameB);
+      if (networkCompare !== 0) return networkCompare;
+
+      const isANative = a.tokenKey === "native";
+      const isBNative = b.tokenKey === "native";
+      if (isANative !== isBNative) return isANative ? -1 : 1;
+
+      return a.header.localeCompare(b.header);
+    });
+
+    const header = [
+      ...walletColumns,
+      ...columns.map(c => c.displayHeader),
+      ...(usdEnabled ? ["Total USD"] : [])
+    ];
+
+    // Fast lookup: network -> address (lowercase) -> wallet result
+    const resultsByNetwork = new Map<Network, Map<string, WalletBalance>>();
+    allNetworksResults.forEach(netResult => {
+      const walletMap = new Map<string, WalletBalance>();
+      netResult.results.forEach(wb => walletMap.set(wb.wallet.address.toLowerCase(), wb));
+      resultsByNetwork.set(netResult.network, walletMap);
+    });
+
+    const rows: WalletRow[] = [];
+    for (const [address, privateKey] of uniqueWallets.entries()) {
+      const walletInfo = hasPrivateKeys ? [address, privateKey || ""] : [address];
+
+      let hasBalance = false;
+      let hasUnpricedBalance = false;
+      let totalUsd: number | null = usdEnabled ? 0 : null;
+
+      const balances = columns.map(column => {
+        const wb = resultsByNetwork.get(column.network)?.get(address.toLowerCase());
+        const balance = wb?.balances.get(column.tokenKey) || "0";
+
+        const amount = parseFloat(balance);
+        if (!isNaN(amount) && amount > 0) {
+          hasBalance = true;
+          if (usdEnabled) {
+            const price = prices!.getPrice(column.network, column.tokenKey);
+            if (price !== undefined) {
+              totalUsd = (totalUsd || 0) + amount * price;
+            } else {
+              hasUnpricedBalance = true;
+            }
+          }
+        }
+
+        return balance;
+      });
+
+      const cells = [
+        ...walletInfo,
+        ...balances,
+        ...(usdEnabled ? [this.formatUsd(totalUsd || 0)] : [])
+      ];
+
+      rows.push({ cells, hasBalance, hasUnpricedBalance, totalUsd });
+    }
+
+    const numericColCount = columns.length + (usdEnabled ? 1 : 0);
+    const mainFile = path.join(RESULTS_FOLDER, filename);
+    this.writeCsvFile(mainFile, header, rows, walletColumns.length, numericColCount, rows.length);
+
+    const nonZeroRows = rows.filter(row => this.passesDustFilter(row));
+    let nonZeroFile: string | null = null;
+    if (nonZeroRows.length > 0) {
+      nonZeroFile = path.join(
+        RESULTS_FOLDER,
+        filename.replace(/\.csv$/, "") + "_nonzero.csv"
+      );
+      this.writeCsvFile(nonZeroFile, header, nonZeroRows, walletColumns.length, numericColCount, nonZeroRows.length);
+    }
+
+    return { mainFile, nonZeroFile, nonZeroCount: nonZeroRows.length };
   }
-} 
+
+  // Dust filter: threshold 0 — any non-zero balance; threshold > 0 — by USD.
+  // Balances in unpriced tokens are kept — a false positive beats missing money.
+  private passesDustFilter(row: WalletRow): boolean {
+    if (!row.hasBalance) return false;
+    if (this.dustThresholdUsd <= 0) return true;
+    if (row.totalUsd === null) return true; // prices unavailable — skip the USD filter
+    return row.totalUsd >= this.dustThresholdUsd || row.hasUnpricedBalance;
+  }
+
+  private writeCsvFile(
+    filePath: string,
+    header: string[],
+    rows: WalletRow[],
+    walletColCount: number,
+    numericColCount: number,
+    totalWallets: number
+  ): void {
+    if (!fs.existsSync(RESULTS_FOLDER)) {
+      fs.mkdirSync(RESULTS_FOLDER, { recursive: true });
+    }
+
+    const lines: string[] = [header.join(CSV_DELIMITER)];
+    rows.forEach(row => lines.push(row.cells.join(CSV_DELIMITER)));
+
+    // Totals row ("ERROR" values are excluded from the sum)
+    if (rows.length > 0) {
+      const totals: string[] = ["Total balance:", ...Array(walletColCount - 1).fill("")];
+      for (let col = walletColCount; col < walletColCount + numericColCount; col++) {
+        const sum = rows.reduce((acc, row) => {
+          const value = parseFloat(row.cells[col]);
+          return acc + (isNaN(value) ? 0 : value);
+        }, 0);
+        totals.push(this.formatNumber(sum));
+      }
+      lines.push("");
+      lines.push(totals.join(CSV_DELIMITER));
+    }
+
+    fs.writeFileSync(filePath, lines.join("\n") + "\n");
+  }
+
+  private formatUsd(value: number): string {
+    return value.toFixed(2);
+  }
+
+  // Number without scientific notation or trailing zeros
+  private formatNumber(value: number): string {
+    return value.toFixed(18).replace(/(\.0*|(?<=(\.\d*?[1-9]))0+)$/, "");
+  }
+}
